@@ -6,7 +6,7 @@ declare class Document<T> {
     private validate: (data: T) => true | LuaTuple<[false, string]>
     private lockId: string
     private data: T
-    readonly closed: boolean
+    private closed: boolean
 
     constructor(collection: Collection<T>, key: string, validate: (data: T) => true | LuaTuple<[false, string]>, lockId: string, data: T)
 
