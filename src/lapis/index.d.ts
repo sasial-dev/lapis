@@ -2,7 +2,7 @@ import { t } from "@rbxts/t";
 import Collection from "./Collection";
 import Document from "./Document";
 
-export { Collection, Document };
+export type { Collection, Document };
 
 // we do not want mixed tables
 export type CollectionSchema = Record<string, unknown>;
