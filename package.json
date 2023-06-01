@@ -16,6 +16,7 @@
   "publishConfig": {
     "access": "public"
   },
+  "repository": "sasial-dev/lapis#typings",
   "devDependencies": {
     "@rbxts/compiler-types": "2.0.4-types.1",
     "@rbxts/t": "3.1.0",
