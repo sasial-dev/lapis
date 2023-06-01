@@ -6,9 +6,6 @@
 *.rbxlx.lock
 *.rbxl.lock
 
-/Packages
-/ServerPackages
-
 /example/Packages
 
 /sourcemap.json
@@ -17,3 +14,5 @@
 
 node_modules
 out
+
+.DS_Store

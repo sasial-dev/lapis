@@ -1,8 +1,7 @@
 {
   "name": "@rbxts/lapis",
-  "version": "0.2.0",
+  "version": "0.2.0-ts.1",
   "main": "out/init.lua",
-  "typings": "out/index.d.ts",
   "license": "MIT",
   "scripts": {
     "build": "rbxtsc",
@@ -19,8 +18,12 @@
   },
   "devDependencies": {
     "@rbxts/compiler-types": "2.0.4-types.1",
+    "@rbxts/t": "3.1.0",
     "@rbxts/types": "1.0.686",
     "roblox-ts": "2.0.4",
     "typescript": "4.8.3"
+  },
+  "peerDependencies": {
+    "@rbxts/t": "*"
   }
 }

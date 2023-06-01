@@ -1,6 +1,7 @@
+import { CollectionSchema } from ".";
 import Collection from "./Collection";
 
-declare class Document<T> {
+declare class Document<T extends CollectionSchema> {
     private collection: Collection<T>
     private key: string
     private validate: (data: T) => true | LuaTuple<[false, string]>

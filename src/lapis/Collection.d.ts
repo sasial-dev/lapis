@@ -1,7 +1,7 @@
-import { CollectionOptions } from ".";
+import { CollectionOptions, CollectionSchema } from ".";
 import Document from "./Document";
 
-declare class Collection<T> {
+declare class Collection<T extends CollectionSchema> {
     private dataStore: DataStore
     private options: CollectionOptions<T> 
     private openDocuments: { [index: string]: Promise<Document<T>> }
