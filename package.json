@@ -1,16 +1,15 @@
 {
   "name": "@rbxts/lapis",
   "version": "0.2.0-ts.1",
-  "main": "out/init.lua",
+  "main": "src/init.lua",
   "license": "MIT",
   "scripts": {
     "build": "rbxtsc",
-    "dev": "rbxtsc -w",
-    "prepublishOnly": "yarn run build"
+    "dev": "rbxtsc -w"
   },
-  "types": "out/index.d.ts",
+  "types": "src/index.d.ts",
   "files": [
-    "out",
+    "src",
     "!**/*.tsbuildinfo"
   ],
   "publishConfig": {
