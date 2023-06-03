@@ -6,6 +6,9 @@
 *.rbxlx.lock
 *.rbxl.lock
 
+/Packages
+/ServerPackages
+
 /example/Packages
 
 /sourcemap.json
