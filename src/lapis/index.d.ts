@@ -5,7 +5,7 @@ import Document from "./Document";
 export type { Collection, Document };
 
 // we do not want mixed tables
-export type CollectionSchema = Record<string, unknown>;
+export type CollectionSchema = Record<string, any>;
 
 interface LapisConfig {
     /** Max save/close retry attempts */
