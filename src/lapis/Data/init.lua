@@ -1,78 +1,103 @@
-local Config = require(script.Parent.Config)
 local Promise = require(script.Parent.Parent.Promise)
-local throttleUpdate = require(script.throttleUpdate)
-local WriteCooldown = require(script.WriteCooldown)
+local Throttle = require(script.Throttle)
 
-local addWriteCooldown = WriteCooldown.addWriteCooldown
-local getWriteCooldown = WriteCooldown.getWriteCooldown
+local Data = {}
+Data.__index = Data
 
-local pendingSaves = {}
+function Data.new(config)
+	local throttle = Throttle.new(config)
 
-local function getPendingSave(dataStore, key)
-	if pendingSaves[dataStore] == nil or pendingSaves[dataStore][key] == nil then
+	throttle:start()
+
+	return setmetatable({
+		config = config,
+		throttle = throttle,
+		ongoingSaves = {},
+	}, Data)
+end
+
+function Data:waitForOngoingSave(dataStore, key)
+	if self.ongoingSaves[dataStore] == nil or self.ongoingSaves[dataStore][key] == nil then
 		return Promise.resolve()
 	end
 
-	return pendingSaves[dataStore][key].promise
+	local ongoingSave = self.ongoingSaves[dataStore][key]
+
+	return Promise.allSettled({
+		ongoingSave.promise,
+		if ongoingSave.pendingSave ~= nil then ongoingSave.pendingSave.promise else nil,
+	})
 end
 
-local Data = {}
+function Data:waitForOngoingSaves()
+	local promises = {}
 
-function Data.load(dataStore, key, transform)
-	return getPendingSave(dataStore, key)
-		:andThenCall(getWriteCooldown, dataStore, key)
-		:andThen(function()
-			local attempts = Config.get("loadAttempts")
-			local retryDelay = Config.get("loadRetryDelay")
-
-			return throttleUpdate(dataStore, key, transform, attempts, retryDelay)
-		end)
-		:tap(function()
-			addWriteCooldown(dataStore, key)
-		end)
-end
-
-function Data.save(dataStore, key, transform)
-	if pendingSaves[dataStore] == nil then
-		pendingSaves[dataStore] = {}
+	for _, ongoingSave in self.ongoingSaves do
+		table.insert(
+			promises,
+			Promise.allSettled({
+				ongoingSave.promise,
+				if ongoingSave.pendingSave ~= nil then ongoingSave.pendingSave.promise else nil,
+			})
+		)
 	end
 
-	local pendingSave = pendingSaves[dataStore][key]
+	return Promise.allSettled(promises)
+end
 
-	if pendingSave ~= nil then
-		pendingSave.transform = transform
+function Data:load(dataStore, key, transform)
+	return self:waitForOngoingSave(dataStore, key):andThen(function()
+		local attempts = self.config:get("loadAttempts")
+		local retryDelay = self.config:get("loadRetryDelay")
 
-		return pendingSave.promise
-	else
-		pendingSaves[dataStore][key] = { transform = transform }
+		return self.throttle:updateAsync(dataStore, key, transform, attempts, retryDelay)
+	end)
+end
 
-		local promise = getWriteCooldown(dataStore, key)
-			:andThen(function()
-				local attempts = Config.get("saveAttempts")
+function Data:save(dataStore, key, transform)
+	if self.ongoingSaves[dataStore] == nil then
+		self.ongoingSaves[dataStore] = {}
+	end
 
-				return throttleUpdate(dataStore, key, function(...)
-					return pendingSaves[dataStore][key].transform(...)
-				end, attempts)
-			end)
-			:andThenCall(addWriteCooldown, dataStore, key)
+	local ongoingSave = self.ongoingSaves[dataStore][key]
+
+	if ongoingSave == nil then
+		local attempts = self.config:get("saveAttempts")
+		local promise = self
+			.throttle
+			:updateAsync(dataStore, key, transform, attempts)
+			:andThenReturn() -- Save promise should not resolve with a value.
 			:finally(function()
-				pendingSaves[dataStore][key] = nil
+				self.ongoingSaves[dataStore][key] = nil
 
-				if next(pendingSaves[dataStore]) == nil then
-					pendingSaves[dataStore] = nil
+				if next(self.ongoingSaves[dataStore]) == nil then
+					self.ongoingSaves[dataStore] = nil
 				end
 			end)
 
 		if promise:getStatus() == Promise.Status.Started then
-			pendingSaves[dataStore][key].promise = promise
+			self.ongoingSaves[dataStore][key] = { promise = promise }
 		end
 
 		return promise
-	end
-end
+	elseif ongoingSave.pendingSave == nil then
+		local pendingSave = { transform = transform }
 
-function Data.getPendingSaves()
-	return pendingSaves
+		local function save()
+			return self:save(dataStore, key, pendingSave.transform)
+		end
+
+		-- promise:finally(save) can't be used because if the ongoingSave promise rejects, so will the promise returned from finally.
+		pendingSave.promise = ongoingSave.promise:andThen(save, save)
+
+		ongoingSave.pendingSave = pendingSave
+
+		return pendingSave.promise
+	else
+		ongoingSave.pendingSave.transform = transform
+
+		return ongoingSave.pendingSave.promise
+	end
 end
 
 return Data

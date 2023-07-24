@@ -8,17 +8,14 @@
       }
     },
     "ReplicatedStorage": {
-      "Clock": {
-        "$path": "Clock.lua"
-      },
       "Packages": {
         "Lapis": {
           "$path": "../"
         },
         "$path": "../Packages"
       },
-      "ServerPackages": {
-        "$path": "../ServerPackages"
+      "DevPackages": {
+        "$path": "../DevPackages"
       }
     },
     "ServerScriptService": {

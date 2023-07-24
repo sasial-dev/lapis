@@ -1,6 +1,5 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Lapis = require(ReplicatedStorage.Packages.Lapis)
 local Promise = require(ReplicatedStorage.Packages.Promise)
 
 local DEFAULT_OPTIONS = {
@@ -11,35 +10,54 @@ local DEFAULT_OPTIONS = {
 }
 
 return function()
-	it("combines save and close requests", function(context)
-		local document = Lapis.createCollection("fff", DEFAULT_OPTIONS):load("doc"):expect()
+	it("it should not merge close into save when save is running", function(context)
+		local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("doc"):expect()
 
-		document:write({
-			foo = "updated value",
-		})
+		-- It's not safe to merge saves when UpdateAsync is running.
+		-- This will yield the UpdateAsync call until stopYield is called.
+		context.dataStoreService.yield:startYield()
 
 		local save = document:save()
+		document:write({ foo = "new" })
 		local close = document:close()
 
-		-- Finish the write cooldown from opening the document.
-		context.clock:tick(6)
+		context.dataStoreService.yield:stopYield()
 
 		Promise.all({ save, close }):expect()
 
-		expect(save).to.equal(close)
+		local saved = context.read("collection", "doc")
 
-		local saved = context.read("fff", "doc")
+		-- If data.foo == "bar", that means the close was merged with the save when it wasn't safe to.
+		expect(saved.data.foo).to.equal("new")
+	end)
 
-		expect(saved).to.be.a("table")
+	it("it should merge pending saves", function(context)
+		local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("doc"):expect()
+
+		context.dataStoreService.yield:startYield()
+
+		local ongoingSave = document:save()
+
+		local pendingSave = document:save()
+		local pendingClose = document:close() -- This should override the pending save.
+
+		context.dataStoreService.yield:stopYield()
+
+		expect(pendingSave).to.equal(pendingClose)
+
+		local values = Promise.all({ ongoingSave, pendingSave, pendingClose }):expect()
+
+		-- save and close should never resolve with a value.
+		-- It's checked in this test to make sure it works with save merging.
+		expect(#values).to.equal(0)
+
+		local saved = context.read("collection", "doc")
+
 		expect(saved.lockId).never.to.be.ok()
-		expect(saved.data.foo).to.equal("updated value")
 	end)
 
 	it("saves data", function(context)
-		local document = Lapis.createCollection("12345", DEFAULT_OPTIONS):load("doc"):expect()
-
-		-- Finish the write cooldown from opening the document.
-		context.clock:tick(6)
+		local document = context.lapis.createCollection("12345", DEFAULT_OPTIONS):load("doc"):expect()
 
 		document:write({
 			foo = "new value",
@@ -54,8 +72,8 @@ return function()
 		expect(saved.data.foo).to.equal("new value")
 	end)
 
-	it("writes the data", function()
-		local document = Lapis.createCollection("1", DEFAULT_OPTIONS):load("doc"):expect()
+	it("writes the data", function(context)
+		local document = context.lapis.createCollection("1", DEFAULT_OPTIONS):load("doc"):expect()
 
 		document:write({
 			foo = "baz",
@@ -64,8 +82,8 @@ return function()
 		expect(document:read().foo).to.equal("baz")
 	end)
 
-	it("write throws if data doesn't validate", function()
-		local document = Lapis.createCollection("2", DEFAULT_OPTIONS):load("doc"):expect()
+	it("write throws if data doesn't validate", function(context)
+		local document = context.lapis.createCollection("2", DEFAULT_OPTIONS):load("doc"):expect()
 
 		expect(function()
 			document:write({
@@ -75,9 +93,7 @@ return function()
 	end)
 
 	it("throws when writing/saving/closing a closed document", function(context)
-		local document = Lapis.createCollection("5", DEFAULT_OPTIONS):load("doc"):expect()
-
-		context.clock:tick(6)
+		local document = context.lapis.createCollection("5", DEFAULT_OPTIONS):load("doc"):expect()
 
 		local promise = document:close()
 
@@ -96,14 +112,14 @@ return function()
 		promise:expect()
 	end)
 
-	it("loads with default data", function()
-		local document = Lapis.createCollection("o", DEFAULT_OPTIONS):load("a"):expect()
+	it("loads with default data", function(context)
+		local document = context.lapis.createCollection("o", DEFAULT_OPTIONS):load("a"):expect()
 
 		expect(document:read().foo).to.equal("bar")
 	end)
 
 	it("loads with existing data", function(context)
-		local collection = Lapis.createCollection("xyz", DEFAULT_OPTIONS)
+		local collection = context.lapis.createCollection("xyz", DEFAULT_OPTIONS)
 
 		context.write("xyz", "xyz", {
 			foo = "existing",
@@ -115,7 +131,7 @@ return function()
 	end)
 
 	it("doesn't save data when the lock was stolen", function(context)
-		local collection = Lapis.createCollection("hi", DEFAULT_OPTIONS)
+		local collection = context.lapis.createCollection("hi", DEFAULT_OPTIONS)
 
 		local document = collection:load("hi"):expect()
 
@@ -127,15 +143,11 @@ return function()
 			foo = "qux",
 		})
 
-		context.clock:tick(6)
-
 		expect(function()
 			document:save():expect()
 		end).to.throw("The session lock was stolen")
 
 		expect(context.read("hi", "hi").data.foo).to.equal("stolen")
-
-		context.clock:tick(6)
 
 		expect(function()
 			document:close():expect()
@@ -145,9 +157,10 @@ return function()
 	end)
 
 	it("doesn't throw when the budget is exhausted", function(context)
-		local document = Lapis.createCollection("bye", DEFAULT_OPTIONS):load("bye"):expect()
+		-- This makes sure the test doesn't pass by retyring after budget is added.
+		context.lapis.setConfig({ loadAttempts = 1 })
 
-		context.clock:tick(6)
+		local document = context.lapis.createCollection("bye", DEFAULT_OPTIONS):load("bye"):expect()
 
 		context.dataStoreService.budget.budgets[Enum.DataStoreRequestType.GetAsync] = 0
 		context.dataStoreService.budget.budgets[Enum.DataStoreRequestType.SetIncrementAsync] = 0
@@ -155,7 +168,10 @@ return function()
 
 		local promise = document:save()
 
-		context.clock:tick(1)
+		-- This wait is necessary so that the request is run by Throttle.
+		task.wait(0.1)
+
+		context.dataStoreService.budget:update()
 
 		expect(function()
 			promise:expect()

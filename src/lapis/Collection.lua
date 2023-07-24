@@ -1,14 +1,10 @@
 local HttpService = game:GetService("HttpService")
 
-local AutoSave = require(script.Parent.AutoSave)
 local Compression = require(script.Parent.Compression)
-local Config = require(script.Parent.Config)
-local Data = require(script.Parent.Data)
 local Document = require(script.Parent.Document)
 local freezeDeep = require(script.Parent.freezeDeep)
 local Migration = require(script.Parent.Migration)
 local Promise = require(script.Parent.Parent.Promise)
-local UnixTimestampMillis = require(script.Parent.UnixTimestampMillis)
 
 local LOCK_EXPIRE = 30 * 60
 
@@ -20,7 +16,7 @@ local LOCK_EXPIRE = 30 * 60
 local Collection = {}
 Collection.__index = Collection
 
-function Collection.new(name, options)
+function Collection.new(name, options, data, autoSave, config)
 	assert(options.validate(options.defaultData))
 
 	freezeDeep(options.defaultData)
@@ -28,9 +24,11 @@ function Collection.new(name, options)
 	options.migrations = options.migrations or {}
 
 	return setmetatable({
-		dataStore = Config.get("dataStoreService"):GetDataStore(name),
+		dataStore = config:get("dataStoreService"):GetDataStore(name),
 		options = options,
 		openDocuments = {},
+		data = data,
+		autoSave = autoSave,
 	}, Collection)
 end
 
@@ -44,8 +42,9 @@ function Collection:load(key)
 	if self.openDocuments[key] == nil then
 		local lockId = HttpService:GenerateGUID(false)
 
-		self.openDocuments[key] = Data
-			.load(self.dataStore, key, function(value, keyInfo)
+		self.openDocuments[key] = self
+			.data
+			:load(self.dataStore, key, function(value, keyInfo)
 				if value == nil then
 					return "succeed",
 						{
@@ -60,7 +59,10 @@ function Collection:load(key)
 					return "fail", "Saved migration version ahead of latest version"
 				end
 
-				if value.lockId ~= nil and (UnixTimestampMillis.get() - keyInfo.UpdatedTime) / 1000 < LOCK_EXPIRE then
+				if
+					value.lockId ~= nil
+					and (DateTime.now().UnixTimestampMillis - keyInfo.UpdatedTime) / 1000 < LOCK_EXPIRE
+				then
 					return "retry", "Could not acquire lock"
 				end
 
@@ -86,7 +88,7 @@ function Collection:load(key)
 
 				local document = Document.new(self, key, self.options.validate, lockId, data)
 
-				AutoSave.addDocument(document)
+				self.autoSave:addDocument(document)
 
 				return document
 			end)
