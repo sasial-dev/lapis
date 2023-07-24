@@ -1,13 +1,14 @@
 import { t } from "@rbxts/t";
 import Collection from "./Collection";
 import Document from "./Document";
+import Internal from "./Internal";
 
 export type { Collection, Document };
 
 // we do not want mixed tables
 export type CollectionSchema = Record<string, any>;
 
-interface LapisConfig {
+export interface LapisConfig {
     /** Max save/close retry attempts */
     saveAttempts: number;
     /** Max lock acquire retry attempts */
@@ -21,7 +22,7 @@ interface LapisConfig {
 	dataStoreService: Pick<DataStoreService, "GetDataStore" | "GetRequestBudgetForRequestType">;
 }
 
-export function setConfig(config: Partial<LapisConfig>): void;
+export const setConfig: Internal["setConfig"]
 
 export interface CollectionOptions<T extends CollectionSchema> {
     /** Takes a document's data and returns true on success or false and an error on fail. */
@@ -31,4 +32,4 @@ export interface CollectionOptions<T extends CollectionSchema> {
     migrations?: [...Array<(data: unknown) => unknown>, (data: unknown) => T];
 }
 
-export function createCollection<T extends CollectionSchema>(name: string, options: CollectionOptions<T>): Collection<T>;
+export const createCollection: Internal["createCollection"] 
