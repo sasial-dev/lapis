@@ -13,7 +13,7 @@ declare class Collection<T extends CollectionSchema> {
 
     constructor(name: string, options: CollectionOptions<T>, data: Data, autoSave: AutoSave<T>, config: Config);
 
-    load(key: string): Promise<Document<T>>;
+    load(key: string, defaultUserIds?: number[]): Promise<Document<T>>;
 }
 
 export = Collection;

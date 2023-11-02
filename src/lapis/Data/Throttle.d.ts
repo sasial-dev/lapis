@@ -3,7 +3,7 @@ import Config from "../Config";
 interface QueueItem<T extends defined> {
     dataStore: DataStore;
     key: string;
-    transform: (value: unknown, keyInfo: unknown) => T;
+    transform: (value: T, keyInfo: DataStoreKeyInfo) => T;
     retryAttempts: number;
     retryDelay: number;
     resolve: (value: T | Promise<T>) => void,
