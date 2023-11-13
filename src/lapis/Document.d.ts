@@ -25,6 +25,8 @@ declare class Document<T extends CollectionSchema> {
 
     close(): Promise<void>;
 
+    beforeSave(callback: () => void): void;
+
     beforeClose(callback: () => void): void;
 }
 
