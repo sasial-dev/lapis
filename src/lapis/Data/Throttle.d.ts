@@ -13,11 +13,12 @@ interface QueueItem<T extends defined> {
 declare class Throttle {
     private config: Config;
     private queue: Array<QueueItem<defined>>;
+    private gameClosed: boolean;
 
     constructor(config: Config)
 
     start(): void;
-    updateAsync<T>(dataStore: DataStore, key: string, transform: (value: unknown, keyInfo: unknown) => T, retryAttempts: number, retryDelay: number): Promise<T>;
+    updateAsync<T>(dataStore: DataStore, key: string, transform: (value: unknown, keyInfo: unknown) => T, cancelOnGameClose: boolean, retryAttempts: number, retryDelay: number): Promise<T>;
 }
 
 export = Throttle;
