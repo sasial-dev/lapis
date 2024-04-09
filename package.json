@@ -1,6 +1,6 @@
 {
   "name": "@rbxts/lapis",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "main": "out/init.lua",
   "license": "MIT",
   "scripts": {
