@@ -4,7 +4,7 @@ import Data from "./Data";
 import AutoSave from "./AutoSave";
 import Config from "./Config";
 
-declare class Collection<T extends CollectionSchema, R extends boolean> {
+declare class Collection<T extends CollectionSchema, R extends boolean = true> {
     private dataStore: DataStore;
     private options: CollectionOptions<T, R>;
     private openDocuments: { [index: string]: Promise<Document<T, R>> };
