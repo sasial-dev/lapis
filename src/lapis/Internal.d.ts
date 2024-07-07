@@ -6,7 +6,7 @@ declare class Internal {
 
     setConfig(config: Partial<LapisConfig>): void;
 
-    createCollection<T extends CollectionSchema>(name: string, options: CollectionOptions<T>): Collection<T>;
+    createCollection<T extends CollectionSchema, R extends boolean>(name: string, options: CollectionOptions<T, R>): Collection<T, R>;
 }
 
 export = Internal;

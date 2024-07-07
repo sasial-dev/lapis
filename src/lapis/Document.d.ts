@@ -1,25 +1,28 @@
 import { CollectionSchema } from ".";
 import Collection from "./Collection";
 
-declare class Document<T extends CollectionSchema> {
-    private collection: Collection<T>;
+declare class Document<T extends CollectionSchema, R extends boolean> {
+    private collection: Collection<T, R>;
     private key: string;
     private validate: (data: T) => true | LuaTuple<[false, string]>;
     private lockId: string;
     private data: T;
-    private userIds?: number[]
+    private userIds?: number[];
+    private lastKeyInfo: DataStoreKeyInfo;
     private closed: boolean;
     private callingBeforeClose: boolean;
 
-    constructor(collection: Collection<T>, key: string, validate: (data: T) => true | LuaTuple<[false, string]>, lockId: string, data: T, userIds?: number[]);
+    constructor(collection: Collection<T, R>, key: string, validate: (data: T) => true | LuaTuple<[false, string]>, lockId: string, data: T, keyInfo: DataStoreKeyInfo);
 
-    read(): Readonly<T>;
+    read(): R extends true ? Readonly<T> : T;
 
     write(data: T): void;
 
     addUserId(userId: number): void;
 
     removeUserId(userId: number): void;
+
+    keyInfo(): DataStoreKeyInfo;
 
     save(): Promise<void>;
 

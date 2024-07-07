@@ -3,6 +3,9 @@ local PromiseTypes = require(script.PromiseTypes)
 
 local internal = Internal.new(true)
 
+type Migrate = (any) -> any
+type Migration = Migrate | { backwardsCompatible: boolean?, migrate: Migrate }
+
 export type DataStoreService = {
 	GetDataStore: (name: string) -> GlobalDataStore,
 	GetRequestBudgetForRequestType: (requestType: Enum.DataStoreRequestType) -> number,
@@ -18,9 +21,10 @@ export type PartialLapisConfig = {
 }
 
 export type CollectionOptions<T> = {
-	defaultData: T,
-	migrations: { (any) -> any }?,
-	validate: (T) -> (boolean, string?),
+	defaultData: T | (key: string) -> T,
+	migrations: { Migration }?,
+	validate: ((any) -> (boolean, string?))?,
+	freezeData: boolean?,
 	[any]: nil,
 }
 
@@ -55,6 +59,11 @@ local Lapis = {}
 ]=]
 
 --[=[
+	@type Migration (any) -> any | { backwardsCompatible: boolean?, migrate: (any) -> any }
+	@within Lapis
+]=]
+
+--[=[
 	```lua
 	Lapis.setConfig({
 		saveAttempts = 10,
@@ -80,11 +89,12 @@ function Lapis.setConfig(partialConfig: PartialLapisConfig)
 end
 
 --[=[
-	@interface CollectionOptions
+	@interface CollectionOptions<T>
 	@within Lapis
-	.validate (any) -> true | (false, string) -- Takes a document's data and returns true on success or false and an error on fail.
-	.defaultData any
-	.migrations { (any) -> any }? -- Migrations take old data and return new data. Order is first to last.
+	.validate ((any) -> true | (false, string))? -- Takes a document's data and returns true on success or false and an error on fail.
+	.defaultData T | (key: string) -> T -- If set to a function, it's called when a new document is created and is passed the key of the document.
+	.freezeData boolean? -- If `true`, data will be deep frozen and can only be updated immutably by calling [`Document:write`](Document#write). Default: `true`
+	.migrations { Migration }? -- Migrations take old data and return new data. Order is first to last. For more information, see: [Migrations](../docs/Migrations).
 ]=]
 
 --[=[

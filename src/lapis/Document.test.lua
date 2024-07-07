@@ -2,19 +2,21 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Promise = require(ReplicatedStorage.Packages.Promise)
 
-local DEFAULT_OPTIONS = {
-	validate = function(data)
-		return typeof(data.foo) == "string", "foo must be a string"
-	end,
-	defaultData = { foo = "bar" },
-}
+local function defaultOptions()
+	return {
+		validate = function(data)
+			return typeof(data.foo) == "string", "foo must be a string"
+		end,
+		defaultData = { foo = "bar" },
+	}
+end
 
 return function(x)
 	local assertEqual = x.assertEqual
 	local shouldThrow = x.shouldThrow
 
 	x.test("it should not merge close into save when save is running", function(context)
-		local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("doc"):expect()
+		local document = context.lapis.createCollection("collection", defaultOptions()):load("doc"):expect()
 
 		-- It's not safe to merge saves when UpdateAsync is running.
 		-- This will yield the UpdateAsync call until stopYield is called.
@@ -35,7 +37,7 @@ return function(x)
 	end)
 
 	x.test("it should merge pending saves", function(context)
-		local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("doc"):expect()
+		local document = context.lapis.createCollection("collection", defaultOptions()):load("doc"):expect()
 
 		context.dataStoreService.yield:startYield()
 
@@ -66,7 +68,7 @@ return function(x)
 	end)
 
 	x.test("saves data", function(context)
-		local document = context.lapis.createCollection("12345", DEFAULT_OPTIONS):load("doc"):expect()
+		local document = context.lapis.createCollection("12345", defaultOptions()):load("doc"):expect()
 
 		document:write({
 			foo = "new value",
@@ -82,7 +84,7 @@ return function(x)
 	end)
 
 	x.test("writes the data", function(context)
-		local document = context.lapis.createCollection("1", DEFAULT_OPTIONS):load("doc"):expect()
+		local document = context.lapis.createCollection("1", defaultOptions()):load("doc"):expect()
 
 		document:write({
 			foo = "baz",
@@ -92,7 +94,7 @@ return function(x)
 	end)
 
 	x.test("write throws if data doesn't validate", function(context)
-		local document = context.lapis.createCollection("2", DEFAULT_OPTIONS):load("doc"):expect()
+		local document = context.lapis.createCollection("2", defaultOptions()):load("doc"):expect()
 
 		shouldThrow(function()
 			document:write({
@@ -102,7 +104,7 @@ return function(x)
 	end)
 
 	x.test("methods throw when called on a closed document", function(context)
-		local document = context.lapis.createCollection("5", DEFAULT_OPTIONS):load("doc"):expect()
+		local document = context.lapis.createCollection("5", defaultOptions()):load("doc"):expect()
 
 		local promise = document:close()
 
@@ -126,7 +128,7 @@ return function(x)
 	end)
 
 	x.test("close returns first promise when called again", function(context)
-		local document = context.lapis.createCollection("col", DEFAULT_OPTIONS):load("doc"):expect()
+		local document = context.lapis.createCollection("col", defaultOptions()):load("doc"):expect()
 
 		local promise = document:close()
 
@@ -134,13 +136,13 @@ return function(x)
 	end)
 
 	x.test("loads with default data", function(context)
-		local document = context.lapis.createCollection("o", DEFAULT_OPTIONS):load("a"):expect()
+		local document = context.lapis.createCollection("o", defaultOptions()):load("a"):expect()
 
 		assert(document:read().foo == "bar", "")
 	end)
 
 	x.test("loads with existing data", function(context)
-		local collection = context.lapis.createCollection("xyz", DEFAULT_OPTIONS)
+		local collection = context.lapis.createCollection("xyz", defaultOptions())
 
 		context.write("xyz", "xyz", {
 			foo = "existing",
@@ -153,9 +155,6 @@ return function(x)
 
 	x.test("freezes document data", function(context)
 		local collection = context.lapis.createCollection("collection", {
-			validate = function()
-				return true
-			end,
 			defaultData = {},
 		})
 
@@ -175,7 +174,7 @@ return function(x)
 	end)
 
 	x.test("doesn't save data when the lock was stolen", function(context)
-		local collection = context.lapis.createCollection("hi", DEFAULT_OPTIONS)
+		local collection = context.lapis.createCollection("hi", defaultOptions())
 
 		local document = collection:load("hi"):expect()
 
@@ -204,7 +203,7 @@ return function(x)
 		-- This makes sure the test doesn't pass by retyring after budget is added.
 		context.lapis.setConfig({ loadAttempts = 1 })
 
-		local document = context.lapis.createCollection("bye", DEFAULT_OPTIONS):load("bye"):expect()
+		local document = context.lapis.createCollection("bye", defaultOptions()):load("bye"):expect()
 
 		context.dataStoreService.budget.budgets[Enum.DataStoreRequestType.GetAsync] = 0
 		context.dataStoreService.budget.budgets[Enum.DataStoreRequestType.SetIncrementAsync] = 0
@@ -220,9 +219,27 @@ return function(x)
 		promise:expect()
 	end)
 
+	x.test(":save doesn't resolve with any value", function(context)
+		local document = context.lapis.createCollection("12345", defaultOptions()):load("doc"):expect()
+
+		local a, b = document:save():expect()
+
+		assert(a == nil, "")
+		assert(b == nil, "")
+	end)
+
+	x.test(":close doesn't resolve with any value", function(context)
+		local document = context.lapis.createCollection("12345", defaultOptions()):load("doc"):expect()
+
+		local a, b = document:close():expect()
+
+		assert(a == nil, "")
+		assert(b == nil, "")
+	end)
+
 	x.nested("Document:beforeSave", function()
 		x.test("throws when setting twice", function(context)
-			local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("document"):expect()
+			local document = context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
 
 			document:beforeSave(function() end)
 
@@ -232,7 +249,7 @@ return function(x)
 		end)
 
 		x.test("throws when calling close in callback", function(context)
-			local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("document"):expect()
+			local document = context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
 
 			document:beforeSave(function()
 				document:close()
@@ -244,7 +261,7 @@ return function(x)
 		end)
 
 		x.test("throws when calling save in callback", function(context)
-			local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("document"):expect()
+			local document = context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
 
 			document:beforeSave(function()
 				document:save()
@@ -256,7 +273,7 @@ return function(x)
 		end)
 
 		x.test("saves new data in document:save", function(context)
-			local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("document"):expect()
+			local document = context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
 
 			document:beforeSave(function()
 				document:read() -- This checks that read doesn't error in the callback.
@@ -269,7 +286,7 @@ return function(x)
 		end)
 
 		x.test("saves new data in document:close", function(context)
-			local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("document"):expect()
+			local document = context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
 
 			document:beforeSave(function()
 				document:write({ foo = "new" })
@@ -283,7 +300,7 @@ return function(x)
 
 	x.nested("Document:beforeClose", function()
 		x.test("throws when setting twice", function(context)
-			local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("document"):expect()
+			local document = context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
 
 			document:beforeClose(function() end)
 
@@ -293,7 +310,7 @@ return function(x)
 		end)
 
 		x.test("throws when calling close in callback", function(context)
-			local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("document"):expect()
+			local document = context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
 
 			document:beforeClose(function()
 				document:close()
@@ -305,7 +322,7 @@ return function(x)
 		end)
 
 		x.test("throws when calling save in callback", function(context)
-			local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("document"):expect()
+			local document = context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
 
 			document:beforeClose(function()
 				document:save()
@@ -317,7 +334,7 @@ return function(x)
 		end)
 
 		x.test("closes document even if beforeClose errors", function(context)
-			local collection = context.lapis.createCollection("collection", DEFAULT_OPTIONS)
+			local collection = context.lapis.createCollection("collection", defaultOptions())
 
 			local promise = collection:load("document")
 			local document = promise:expect()
@@ -343,7 +360,7 @@ return function(x)
 		end)
 
 		x.test("saves new data", function(context)
-			local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("document"):expect()
+			local document = context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
 
 			document:beforeClose(function()
 				document:read() -- This checks that read doesn't error in the callback.
@@ -357,7 +374,7 @@ return function(x)
 		end)
 
 		x.test("beforeSave runs before beforeClose", function(context)
-			local document = context.lapis.createCollection("collection", DEFAULT_OPTIONS):load("document"):expect()
+			local document = context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
 
 			local order = ""
 
@@ -372,6 +389,57 @@ return function(x)
 			document:close():expect()
 
 			assertEqual(order, "sc")
+		end)
+
+		x.nested("keyInfo", function()
+			x.test("gets load key info", function(context)
+				local collection = context.lapis.createCollection("collection", defaultOptions())
+
+				local before = context.getKeyInfo("collection", "document")
+				local document = collection:load("document"):expect()
+				local keyInfo = document:keyInfo()
+
+				assert(before ~= keyInfo, "")
+				assert(typeof(keyInfo) == "table", "")
+				assert(keyInfo.Version == "0", "")
+			end)
+
+			x.test("updating user ids shouldn't affect key info", function(context)
+				local collection = context.lapis.createCollection("collection", defaultOptions())
+
+				local document = collection:load("document"):expect()
+				local keyInfo = document:keyInfo()
+
+				document:addUserId(123)
+
+				assertEqual(#keyInfo:GetUserIds(), 0)
+			end)
+
+			x.test("key info is updated after :save", function(context)
+				local document =
+					context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
+				local keyInfo = document:keyInfo()
+
+				document:save():expect()
+
+				local newKeyInfo = document:keyInfo()
+
+				assert(keyInfo ~= newKeyInfo, "")
+				assert(newKeyInfo.Version == "1", "")
+			end)
+
+			x.test("key info is updated after :close", function(context)
+				local document =
+					context.lapis.createCollection("collection", defaultOptions()):load("document"):expect()
+				local keyInfo = document:keyInfo()
+
+				document:close():expect()
+
+				local newKeyInfo = document:keyInfo()
+
+				assert(keyInfo ~= newKeyInfo, "")
+				assert(newKeyInfo.Version == "1", "")
+			end)
 		end)
 	end)
 end

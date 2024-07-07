@@ -27,14 +27,15 @@ end
 local Document = {}
 Document.__index = Document
 
-function Document.new(collection, key, validate, lockId, data, userIds)
+function Document.new(collection, key, validate, lockId, data, keyInfo)
 	return setmetatable({
 		collection = collection,
 		key = key,
 		validate = validate,
 		lockId = lockId,
 		data = data,
-		userIds = userIds,
+		userIds = keyInfo:GetUserIds(),
+		lastKeyInfo = keyInfo,
 		closed = false,
 	}, Document)
 end
@@ -51,6 +52,8 @@ end
 --[=[
 	Writes the document's data.
 
+	If [`CollectionOptions.freezeData`](Lapis#CollectionOptions<T>) is `true`, `data` will be deep frozen.
+
 	:::warning
 	Throws an error if the document was closed or if the data is invalid.
 	:::
@@ -59,9 +62,14 @@ end
 ]=]
 function Document:write(data)
 	assert(not self.closed, "Cannot write to a closed document")
-	assert(self.validate(data))
 
-	freezeDeep(data)
+	if self.validate ~= nil then
+		assert(self.validate(data))
+	end
+
+	if self.collection.options.freezeData then
+		freezeDeep(data)
+	end
 
 	self.data = data
 end
@@ -99,6 +107,15 @@ function Document:removeUserId(userId)
 end
 
 --[=[
+	Returns the last updated `DataStoreKeyInfo` returned from loading, saving, or closing the document.
+
+	@return DataStoreKeyInfo
+]=]
+function Document:keyInfo()
+	return self.lastKeyInfo
+end
+
+--[=[
 	Saves the document's data. If the save is throttled and you call it multiple times, it will save only once with the latest data.
 
 	:::warning
@@ -116,15 +133,28 @@ function Document:save()
 	assert(self.callingCallback == nil, `Cannot save in {self.callingCallback} callback`)
 
 	return runCallback(self, "beforeSave", self.beforeSaveCallback):andThen(function()
-		return self.collection.data:save(self.collection.dataStore, self.key, function(value)
-			if value.lockId ~= self.lockId then
-				return "fail", "The session lock was stolen"
-			end
+		return self.collection.data
+			:save(self.collection.dataStore, self.key, function(value)
+				if value.lockId ~= self.lockId then
+					return "fail", "The session lock was stolen"
+				end
 
-			value.data = self.data
+				if not self.collection.options.freezeData and self.validate ~= nil then
+					local validateOk, valid, message = pcall(self.validate, self.data)
+					if not validateOk then
+						return "fail", `'validate' threw an error: {valid}`
+					elseif not valid then
+						return "fail", `Invalid data: {message}`
+					end
+				end
 
-			return "succeed", value, self.userIds
-		end)
+				value.data = self.data
+
+				return "succeed", value, self.userIds
+			end)
+			:andThen(function(_, keyInfo)
+				self.lastKeyInfo = keyInfo
+			end)
 	end)
 end
 
@@ -157,11 +187,23 @@ function Document:close()
 						return "fail", "The session lock was stolen"
 					end
 
+					if not self.collection.options.freezeData and self.validate ~= nil then
+						local validateOk, valid, message = pcall(self.validate, self.data)
+						if not validateOk then
+							return "fail", `'validate' threw an error: {valid}`
+						elseif not valid then
+							return "fail", `Invalid data: {message}`
+						end
+					end
+
 					value.data = self.data
 					value.lockId = nil
 
 					return "succeed", value, self.userIds
 				end)
+			end)
+			:andThen(function(_, keyInfo)
+				self.lastKeyInfo = keyInfo
 			end)
 	end
 

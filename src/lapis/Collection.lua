@@ -4,6 +4,7 @@ local Document = require(script.Parent.Document)
 local freezeDeep = require(script.Parent.freezeDeep)
 local Migration = require(script.Parent.Migration)
 local Promise = require(script.Parent.Parent.Promise)
+local copyDeep = require(script.Parent.copyDeep)
 
 local LOCK_EXPIRE = 30 * 60
 
@@ -16,11 +17,25 @@ local Collection = {}
 Collection.__index = Collection
 
 function Collection.new(name, options, data, autoSave, config)
-	assert(options.validate(options.defaultData))
+	if typeof(options.defaultData) ~= "function" and options.validate ~= nil then
+		assert(options.validate(options.defaultData))
+	end
 
-	freezeDeep(options.defaultData)
+	local migrations = {}
+	if options.migrations ~= nil then
+		for _, migration in options.migrations do
+			if typeof(migration) == "function" then
+				table.insert(migrations, { migrate = migration })
+			else
+				table.insert(migrations, migration)
+			end
+		end
+	end
+	options.migrations = migrations
 
-	options.migrations = options.migrations or {}
+	options.freezeData = if options.freezeData ~= nil then options.freezeData else true
+
+	freezeDeep(options)
 
 	return setmetatable({
 		dataStore = config:get("dataStoreService"):GetDataStore(name),
@@ -54,17 +69,38 @@ function Collection:load(key, defaultUserIds)
 		.data
 		:load(self.dataStore, key, function(value, keyInfo)
 			if value == nil then
+				local defaultData
+				if typeof(self.options.defaultData) == "function" then
+					local defaultOk, tailoredDefaultData = pcall(self.options.defaultData, key)
+					if not defaultOk then
+						return "fail", `'defaultData' threw an error: {tailoredDefaultData}`
+					end
+
+					if self.options.validate ~= nil then
+						local validateOk, valid, message = pcall(self.options.validate, tailoredDefaultData)
+						if not validateOk then
+							return "fail", `'validate' threw an error: {valid}`
+						elseif not valid then
+							return "fail", `Invalid data: {message}`
+						end
+					end
+
+					defaultData = copyDeep(tailoredDefaultData)
+				else
+					-- The data was validated when the collection was created.
+					defaultData = if self.options.freezeData
+						then self.options.defaultData
+						else copyDeep(self.options.defaultData)
+				end
+
 				local data = {
 					migrationVersion = #self.options.migrations,
+					lastCompatibleVersion = Migration.getLastCompatibleVersion(self.options.migrations),
 					lockId = lockId,
-					data = self.options.defaultData,
+					data = defaultData,
 				}
 
 				return "succeed", data, defaultUserIds
-			end
-
-			if value.migrationVersion > #self.options.migrations then
-				return "fail", "Saved migration version ahead of latest version"
 			end
 
 			if
@@ -74,15 +110,23 @@ function Collection:load(key, defaultUserIds)
 				return "retry", "Could not acquire lock"
 			end
 
-			local migrated = Migration.migrate(self.options.migrations, value.migrationVersion, value.data)
+			local migrationOk, migrated, lastCompatibleVersion = Migration.migrate(self.options.migrations, value)
+			if not migrationOk then
+				return "fail", migrated
+			end
 
-			local ok, message = self.options.validate(migrated)
-			if not ok then
-				return "fail", `Invalid data: {message}`
+			if self.options.validate ~= nil then
+				local validateOk, valid, message = pcall(self.options.validate, migrated)
+				if not validateOk then
+					return "fail", `'validate' threw an error: {valid}`
+				elseif not valid then
+					return "fail", `Invalid data: {message}`
+				end
 			end
 
 			local data = {
 				migrationVersion = #self.options.migrations,
+				lastCompatibleVersion = lastCompatibleVersion,
 				lockId = lockId,
 				data = migrated,
 			}
@@ -99,9 +143,11 @@ function Collection:load(key, defaultUserIds)
 
 			local data = value.data
 
-			freezeDeep(data)
+			if self.options.freezeData then
+				freezeDeep(data)
+			end
 
-			local document = Document.new(self, key, self.options.validate, lockId, data, keyInfo:GetUserIds())
+			local document = Document.new(self, key, self.options.validate, lockId, data, keyInfo)
 
 			self.autoSave:finishLoad(document)
 
