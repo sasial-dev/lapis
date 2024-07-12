@@ -1,7 +1,7 @@
 import { CollectionSchema } from ".";
 import Collection from "./Collection";
 
-declare class Document<T extends CollectionSchema, R extends boolean> {
+declare class Document<T extends CollectionSchema, R extends boolean = true> {
     private collection: Collection<T, R>;
     private key: string;
     private validate: (data: T) => true | LuaTuple<[false, string]>;
