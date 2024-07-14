@@ -27,7 +27,7 @@ export interface LapisConfig {
 
 export const setConfig: Internal["setConfig"]
 
-export interface CollectionOptions<T extends CollectionSchema, R extends boolean> {
+export interface CollectionOptions<T extends CollectionSchema, R extends boolean = true> {
     /** Takes a document's data and returns true on success or false and an error on fail. */
     validate?: t.check<T>;
     defaultData: T | ((key: string) => T);
