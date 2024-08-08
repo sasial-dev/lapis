@@ -110,6 +110,8 @@ function Collection:load(key, defaultUserIds)
 				return "retry", "Could not acquire lock"
 			end
 
+			local savedVersion = value.migrationVersion
+
 			local migrationOk, migrated, lastCompatibleVersion = Migration.migrate(self.options.migrations, value)
 			if not migrationOk then
 				return "fail", migrated
@@ -125,7 +127,7 @@ function Collection:load(key, defaultUserIds)
 			end
 
 			local data = {
-				migrationVersion = #self.options.migrations,
+				migrationVersion = math.max(savedVersion, #self.options.migrations),
 				lastCompatibleVersion = lastCompatibleVersion,
 				lockId = lockId,
 				data = migrated,
@@ -166,6 +168,41 @@ function Collection:load(key, defaultUserIds)
 				self.autoSave.ongoingLoads -= 1
 			end
 		end)
+end
+
+--[=[
+	Reads the data of the document with `key` regardless of whether it is session locked. This is useful for viewing a
+	document without editing or session locking it. The data gets migrated but not saved.
+
+	If the document has never been loaded, the promise will return `nil`.
+
+	[DataStoreGetOptions.UseCache](https://create.roblox.com/docs/reference/engine/classes/DataStoreGetOptions#UseCache) is disabled.
+
+	@param key string
+	@return Promise<T?>
+]=]
+function Collection:read(key)
+	return self.data:read(self.dataStore, key):andThen(function(value, keyInfo)
+		if value == nil then
+			return nil
+		end
+
+		local migrationOk, migrated = Migration.migrate(self.options.migrations, value)
+		if not migrationOk then
+			return Promise.reject(migrated)
+		end
+
+		if self.options.validate ~= nil then
+			local validateOk, valid, message = pcall(self.options.validate, migrated)
+			if not validateOk then
+				return Promise.reject(`'validate' threw an error: {valid}`)
+			elseif not valid then
+				return Promise.reject(`Invalid data: {message}`)
+			end
+		end
+
+		return value.data, keyInfo
+	end)
 end
 
 return Collection

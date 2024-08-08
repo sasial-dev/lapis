@@ -12,6 +12,7 @@ declare class Data {
     waitForOngoingSave(dataStore: DataStore, key: string): Promise<Array<Promise.Status>>
     waitForOngoingSaves(): Promise<Array<Promise.Status>>
 
+    read<T>(dataStore: DataStore, key: string): Promise<T>
     load<T>(dataStore: DataStore, key: string, transform: (value: unknown, keyInfo: unknown) => T): Promise<T>
     save<T>(dataStore: DataStore, key: string, transform: (value: unknown, keyInfo: unknown) => T): Promise<T>
 }

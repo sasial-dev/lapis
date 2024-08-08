@@ -18,7 +18,12 @@ declare class Throttle {
     constructor(config: Config)
 
     start(): void;
+
+    getGetAsyncBudget(): number;
+    getUpdateAsyncBudget(): number;
+
     updateAsync<T>(dataStore: DataStore, key: string, transform: (value: unknown, keyInfo: unknown) => T, cancelOnGameClose: boolean, retryAttempts: number, retryDelay: number): Promise<T>;
+    getAsync<T>(dataStore: DataStore, key: string): Promise<T>;
 }
 
 export = Throttle;

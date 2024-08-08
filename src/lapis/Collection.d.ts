@@ -14,6 +14,7 @@ declare class Collection<T extends CollectionSchema, R extends boolean = true> {
     constructor(name: string, options: CollectionOptions<T, R>, data: Data, autoSave: AutoSave<T>, config: Config);
 
     load(key: string, defaultUserIds?: number[]): Promise<Document<T, R>>;
+    read(key: string): Promise<R extends true ? Readonly<T> : T>;
 }
 
 export = Collection;
