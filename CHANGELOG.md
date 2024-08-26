@@ -2,6 +2,24 @@
 
 ## Unreleased Changes
 
+## 0.3.5 - August 24, 2024
+* Files now use the `.luau` extension instead of `.lua`. ([#61])
+* Switched wally realm to `shared`. This means Lapis can be used as a shared or server dependency. ([#62])
+* `beforeClose` and `beforeSave` now throw an error if they yield. For more information, see the PR. ([#64])
+* Added `Collection:remove` to remove the data from a document. ([#65])
+* Session locks will now be removed from documents if `Document:close` fails for the following reasons: ([#66])
+  * `beforeSave`/`beforeClose` threw an error.
+  * `validate` threw an error.
+  * `validate` didn't return `true`.
+* `DataStoreKeyInfo:GetMetadata()` is now preserved. Before, it would be erased anytime a `Document` was saved or closed. ([#67])
+
+[#61]: https://github.com/nezuo/lapis/pull/61
+[#62]: https://github.com/nezuo/lapis/pull/62
+[#64]: https://github.com/nezuo/lapis/pull/64
+[#65]: https://github.com/nezuo/lapis/pull/65
+[#66]: https://github.com/nezuo/lapis/pull/66
+[#67]: https://github.com/nezuo/lapis/pull/67
+
 ## 0.3.4 - August 6, 2024
 * Added `Collection:read` to view a document's data without editing or session locking it. ([#59])
 * **IMPORTANT**: Fixed bug that resets a saved migration version that is ahead of the server's version and is backwards compatible. ([#60])

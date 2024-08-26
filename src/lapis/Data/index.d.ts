@@ -15,6 +15,9 @@ declare class Data {
     read<T>(dataStore: DataStore, key: string): Promise<T>
     load<T>(dataStore: DataStore, key: string, transform: (value: unknown, keyInfo: unknown) => T): Promise<T>
     save<T>(dataStore: DataStore, key: string, transform: (value: unknown, keyInfo: unknown) => T): Promise<T>
+    remove(dataStore: DataStore, key: string): Promise<void>
+
+    removeLock<T>(dataStore: DataStore, key: string, lockIdToRemove: string): Promise<T>;
 }
 
 export = Data;

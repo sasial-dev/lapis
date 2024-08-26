@@ -7,6 +7,7 @@ declare class AutoSave<T extends CollectionSchema, R extends boolean = true> {
     private data: Data
     private gameClosed: boolean
     private ongoingLoads: number
+    private ongoingRemoveLocks: number
 
     constructor(data: Data);
 
