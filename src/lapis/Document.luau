@@ -1,5 +1,7 @@
+local Error = require(script.Parent.Error)
 local freezeDeep = require(script.Parent.freezeDeep)
 local Promise = require(script.Parent.Parent.Promise)
+local noYield = require(script.Parent.noYield)
 
 local function runCallback(document, name, callback)
 	if callback == nil then
@@ -9,12 +11,12 @@ local function runCallback(document, name, callback)
 	document.callingCallback = name
 
 	return Promise.new(function(resolve, reject)
-		local ok, message = pcall(callback)
+		local ok, message = pcall(noYield, callback)
 
 		document.callingCallback = nil
 
 		if not ok then
-			reject(`{name} callback threw error: {message}`)
+			reject(Error.new("BeforeSaveCloseCallbackThrew", `{name} callback threw error: {message}`))
 		else
 			resolve()
 		end
@@ -50,9 +52,15 @@ function Document:read()
 end
 
 --[=[
-	Writes the document's data.
+	Updates the document's cached data. This method doesn't save the data to the DataStore; it only modifies the
+	document's in-memory data.
 
-	If [`CollectionOptions.freezeData`](Lapis#CollectionOptions<T>) is `true`, `data` will be deep frozen.
+	This method should be used when performing immutable updates to the document's data. For mutable updates, the data
+	can be directly modified:
+	```lua
+	local data = document:read()
+	data.coins += 100
+	```
 
 	:::warning
 	Throws an error if the document was closed or if the data is invalid.
@@ -75,7 +83,8 @@ function Document:write(data)
 end
 
 --[=[
-	Adds a user id to the document's `DataStoreKeyInfo:GetUserIds()`. The change won't apply until the document is saved or closed.
+	Adds a user id to the document's `DataStoreKeyInfo:GetUserIds()`. The change won't apply until the document is
+	saved or closed.
 
 	If the user id is already associated with the document the method won't do anything.
 
@@ -90,7 +99,8 @@ function Document:addUserId(userId)
 end
 
 --[=[
-	Removes a user id from the document's `DataStoreKeyInfo:GetUserIds()`. The change won't apply until the document is saved or closed.
+	Removes a user id from the document's `DataStoreKeyInfo:GetUserIds()`. The change won't apply until the document is
+	saved or closed.
 
 	If the user id is not associated with the document the method won't do anything.
 
@@ -116,14 +126,18 @@ function Document:keyInfo()
 end
 
 --[=[
-	Saves the document's data. If the save is throttled and you call it multiple times, it will save only once with the latest data.
+	Saves the document's data. If the save is throttled and you call it multiple times, it will save only once with the
+	latest data.
+
+	Documents are saved automatically. This method is used mainly to handle developer product purchases
+	(see the [example](../docs/DeveloperProduct)) or other situations requiring immediate saving.
 
 	:::warning
 	Throws an error if the document was closed.
 	:::
 
 	:::warning
-	If the beforeSave callback errors, the returned promise will reject and the data will not be saved.
+	If the beforeSave callback yields or errors, the returned promise will reject and the data will not be saved.
 	:::
 
 	@return Promise<()>
@@ -132,30 +146,38 @@ function Document:save()
 	assert(not self.closed, "Cannot save a closed document")
 	assert(self.callingCallback == nil, `Cannot save in {self.callingCallback} callback`)
 
-	return runCallback(self, "beforeSave", self.beforeSaveCallback):andThen(function()
-		return self.collection.data
-			:save(self.collection.dataStore, self.key, function(value)
-				if value.lockId ~= self.lockId then
-					return "fail", "The session lock was stolen"
-				end
-
-				if not self.collection.options.freezeData and self.validate ~= nil then
-					local validateOk, valid, message = pcall(self.validate, self.data)
-					if not validateOk then
-						return "fail", `'validate' threw an error: {valid}`
-					elseif not valid then
-						return "fail", `Invalid data: {message}`
+	return runCallback(self, "beforeSave", self.beforeSaveCallback)
+		:andThen(function()
+			return self.collection.data
+				:save(self.collection.dataStore, self.key, function(value, keyInfo)
+					if value == nil then
+						return "fail", Error.new("DocumentRemoved", "The document was removed")
 					end
-				end
 
-				value.data = self.data
+					if value.lockId ~= self.lockId then
+						return "fail", Error.new("SessionLockStolen", "The session lock was stolen")
+					end
 
-				return "succeed", value, self.userIds
-			end)
-			:andThen(function(_, keyInfo)
-				self.lastKeyInfo = keyInfo
-			end)
-	end)
+					if not self.collection.options.freezeData and self.validate ~= nil then
+						local validateOk, valid, message = pcall(self.validate, self.data)
+						if not validateOk then
+							return "fail", Error.new("ValidateThrew", `'validate' threw an error: {valid}`)
+						elseif not valid then
+							return "fail", Error.new("ValidateFailed", `Invalid data: {message}`)
+						end
+					end
+
+					value.data = self.data
+
+					return "succeed", value, self.userIds, keyInfo:GetMetadata()
+				end)
+				:andThen(function(_, keyInfo)
+					self.lastKeyInfo = keyInfo
+				end)
+		end)
+		:catch(function(err)
+			return Promise.reject(`DataStoreFailure({err.message})`)
+		end)
 end
 
 --[=[
@@ -165,7 +187,7 @@ end
 	If called again, it will return the promise from the original call.
 
 	:::warning
-	If the beforeSave or beforeClose callbacks error, the returned promise will reject and the data will not be saved.
+	If the beforeSave or beforeClose callbacks yield or error, the returned promise will reject and the data will not be saved.
 	:::
 
 	@return Promise<()>
@@ -182,28 +204,52 @@ function Document:close()
 				self.collection.autoSave:removeDocument(self)
 			end)
 			:andThen(function()
-				return self.collection.data:save(self.collection.dataStore, self.key, function(value)
+				return self.collection.data:save(self.collection.dataStore, self.key, function(value, keyInfo)
+					if value == nil then
+						return "fail", Error.new("DocumentRemoved", "The document was removed")
+					end
+
 					if value.lockId ~= self.lockId then
-						return "fail", "The session lock was stolen"
+						return "fail", Error.new("SessionLockStolen", "The session lock was stolen")
 					end
 
 					if not self.collection.options.freezeData and self.validate ~= nil then
 						local validateOk, valid, message = pcall(self.validate, self.data)
 						if not validateOk then
-							return "fail", `'validate' threw an error: {valid}`
+							return "fail", Error.new("ValidateThrew", `'validate' threw an error: {valid}`)
 						elseif not valid then
-							return "fail", `Invalid data: {message}`
+							return "fail", Error.new("ValidateFailed", `Invalid data: {message}`)
 						end
 					end
 
 					value.data = self.data
 					value.lockId = nil
 
-					return "succeed", value, self.userIds
+					return "succeed", value, self.userIds, keyInfo:GetMetadata()
 				end)
 			end)
 			:andThen(function(_, keyInfo)
 				self.lastKeyInfo = keyInfo
+			end)
+			:catch(function(err)
+				if
+					err.kind == "BeforeSaveCloseCallbackThrew"
+					or err.kind == "ValidateThrew"
+					or err.kind == "ValidateFailed"
+				then
+					self.collection.autoSave.ongoingRemoveLocks += 1
+
+					self.collection.data
+						:removeLock(self.collection.dataStore, self.key, self.lockId)
+						:catch(function(removeLockErr)
+							warn(`RemoveLockFailure({removeLockErr.message})`)
+						end)
+						:finally(function()
+							self.collection.autoSave.ongoingRemoveLocks -= 1
+						end)
+				end
+
+				return Promise.reject(`DataStoreFailure({err.message})`)
 			end)
 	end
 
