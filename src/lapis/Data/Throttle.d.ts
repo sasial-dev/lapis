@@ -21,9 +21,11 @@ declare class Throttle {
 
     getGetAsyncBudget(): number;
     getUpdateAsyncBudget(): number;
+    getRemoveAsyncBudget(): number;
 
     updateAsync<T>(dataStore: DataStore, key: string, transform: (value: unknown, keyInfo: unknown) => T, cancelOnGameClose: boolean, retryAttempts: number, retryDelay: number): Promise<T>;
     getAsync<T>(dataStore: DataStore, key: string): Promise<T>;
+    removeAsync(dataStore: DataStore, key: string): Promise<void>;
 }
 
 export = Throttle;

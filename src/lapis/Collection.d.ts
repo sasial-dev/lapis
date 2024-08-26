@@ -15,6 +15,7 @@ declare class Collection<T extends CollectionSchema, R extends boolean = true> {
 
     load(key: string, defaultUserIds?: number[]): Promise<Document<T, R>>;
     read(key: string): Promise<R extends true ? Readonly<T> : T>;
+    remove(key: string): Promise<void>;
 }
 
 export = Collection;
