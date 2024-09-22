@@ -1,2 +1,2 @@
-// import "./Promise";
+import "./Promise";
 export * from './lapis';
