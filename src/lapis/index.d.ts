@@ -8,7 +8,7 @@ export type { Collection, Document };
 // we do not want mixed tables
 export type CollectionSchema = Record<string, any>;
 
-type Migrate<T> = (data: unknown) => T
+type Migrate<T> = (data: any) => T
 type Migration<T = unknown> = Migrate<T> | { backwardsCompatible?: boolean, migrate: Migrate<T> }
 
 export interface LapisConfig {
