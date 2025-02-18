@@ -14,7 +14,7 @@ declare class Document<T extends CollectionSchema, R extends boolean = true> {
 
     constructor(collection: Collection<T, R>, key: string, validate: (data: T) => true | LuaTuple<[false, string]>, lockId: string, data: T, keyInfo: DataStoreKeyInfo);
 
-    read(): R extends true ? Readonly<T> : T;
+    read(): R extends true ? Readonly<T | undefined> : T | undefined;
 
     write(data: T): void;
 
